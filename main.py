@@ -10,9 +10,10 @@ from collections import defaultdict
 import asyncio
 import aiohttp
 from typing import List, Dict
-import feedparser  # For RSS/XML feeds
+import feedparser
+import urllib.parse
 
-class UniversalResearchTool:
+class CareerResearchTool:
     def __init__(self):
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
@@ -20,27 +21,46 @@ class UniversalResearchTool:
         self.results = defaultdict(dict)
         
     def parse_query(self, query: str) -> tuple:
-        """Parse user input into components"""
+        """Parse user input into career research components"""
         parts = query.split(',')
-        company = parts[0].strip() if len(parts) > 0 else ""
-        topic = parts[1].strip() if len(parts) > 1 else ""
-        year = parts[2].strip() if len(parts) > 2 else ""
+        degree = parts[0].strip() if len(parts) > 0 else ""
+        experience = parts[1].strip() if len(parts) > 1 else ""
+        skills = parts[2].strip() if len(parts) > 2 else ""
+        job_market = parts[3].strip() if len(parts) > 3 else ""
+        year = parts[4].strip() if len(parts) > 4 else "2024"
         
-        return company, topic, year
+        return degree, experience, skills, job_market, year
+    
+    def build_search_queries(self, degree: str, experience: str, skills: str, job_market: str, year: str) -> Dict[str, str]:
+        """Build interconnected search queries for career research"""
+        base_query = f"{degree} {experience} {skills} {job_market} {year}"
+        
+        queries = {
+            'career_opportunities': f'"{degree}" "{experience}" jobs career opportunities {year}',
+            'skills_required': f'"{degree}" "{experience}" skills required technical skills {year}',
+            'job_market': f'"{degree}" job market trends employment opportunities {year}',
+            'salary_expectations': f'"{degree}" "{experience}" salary compensation pay scale {year}',
+            'companies_hiring': f'companies hiring "{degree}" "{experience}" {year}',
+            'future_scope': f'"{degree}" future scope career growth {year}'
+        }
+        
+        return queries
     
     def search_google_news(self, query: str) -> List[Dict]:
-        """Search Google News for relevant articles using feedparser"""
+        """Search Google News for career-related articles"""
         try:
-            search_url = f"https://news.google.com/rss/search?q={query}"
+            encoded_query = urllib.parse.quote(query)
+            search_url = f"https://news.google.com/rss/search?q={encoded_query}"
             news_feed = feedparser.parse(search_url)
             
             articles = []
-            for entry in news_feed.entries[:15]:  # Get top 15 results
+            for entry in news_feed.entries[:10]:
                 article = {
                     'title': entry.title if hasattr(entry, 'title') else '',
                     'link': entry.link if hasattr(entry, 'link') else '',
                     'published': entry.published if hasattr(entry, 'published') else '',
-                    'source': entry.source.title if hasattr(entry, 'source') else 'Unknown'
+                    'source': entry.source.title if hasattr(entry, 'source') else 'Unknown',
+                    'summary': entry.summary if hasattr(entry, 'summary') else ''
                 }
                 articles.append(article)
             return articles
@@ -48,29 +68,132 @@ class UniversalResearchTool:
             print(f"Error searching Google News: {e}")
             return []
     
-    def get_wikipedia_info(self, company: str) -> Dict:
-        """Get basic information from Wikipedia"""
+    def search_indeed_insights(self, job_title: str) -> List[Dict]:
+        """Get job market insights from Indeed and similar platforms"""
         try:
-            url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{company.replace(' ', '_')}"
+            query = f"{job_title} job market trends skills required"
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.google.com/search?q={encoded_query}"
             response = requests.get(url, headers=self.headers, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    'description': data.get('extract', 'No description available'),
-                    'image_url': data.get('thumbnail', {}).get('source', ''),
-                    'full_url': data.get('content_urls', {}).get('desktop', {}).get('page', '')
-                }
-            else:
-                return {'description': f'No Wikipedia page found for {company}'}
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            insights = []
+            # Extract relevant job market information
+            results = soup.find_all('div', class_='g')[:5]
+            
+            for result in results:
+                title_elem = result.find('h3')
+                link_elem = result.find('a')
+                desc_elem = result.find('span', class_='aCOpRe')
+                
+                if title_elem and link_elem:
+                    insight = {
+                        'title': title_elem.get_text(),
+                        'link': link_elem.get('href'),
+                        'description': desc_elem.get_text() if desc_elem else ''
+                    }
+                    insights.append(insight)
+            
+            return insights
         except Exception as e:
-            print(f"Error fetching Wikipedia info: {e}")
-            return {'description': f'Error fetching Wikipedia info: {e}'}
+            print(f"Error fetching job insights: {e}")
+            return []
     
-    def search_reddit(self, query: str) -> List[Dict]:
-        """Search Reddit for discussions"""
+    def search_linkedin_insights(self, degree: str, skills: str) -> List[Dict]:
+        """Get career insights from LinkedIn learning and articles"""
         try:
-            url = f"https://www.reddit.com/search.json?q={query}&sort=relevance&limit=10"
+            query = f"LinkedIn learning {degree} {skills} career path"
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.google.com/search?q={encoded_query}"
             response = requests.get(url, headers=self.headers, timeout=10)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            insights = []
+            results = soup.find_all('div', class_='g')[:5]
+            
+            for result in results:
+                title_elem = result.find('h3')
+                link_elem = result.find('a')
+                
+                if title_elem and link_elem:
+                    insight = {
+                        'title': title_elem.get_text(),
+                        'link': link_elem.get('href'),
+                        'source': 'LinkedIn Insights'
+                    }
+                    insights.append(insight)
+            
+            return insights
+        except Exception as e:
+            print(f"Error fetching LinkedIn insights: {e}")
+            return []
+    
+    def search_coursera_skills(self, degree: str, skills: str) -> List[Dict]:
+        """Get relevant courses and skills from Coursera"""
+        try:
+            query = f"Coursera {degree} {skills} courses certification"
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.google.com/search?q={encoded_query}"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            courses = []
+            results = soup.find_all('div', class_='g')[:5]
+            
+            for result in results:
+                title_elem = result.find('h3')
+                link_elem = result.find('a')
+                
+                if title_elem and link_elem:
+                    course = {
+                        'title': title_elem.get_text(),
+                        'link': link_elem.get('href'),
+                        'platform': 'Coursera'
+                    }
+                    courses.append(course)
+            
+            return courses
+        except Exception as e:
+            print(f"Error fetching Coursera courses: {e}")
+            return []
+    
+    def search_glassdoor_salaries(self, degree: str, experience: str) -> List[Dict]:
+        """Get salary information from Glassdoor"""
+        try:
+            query = f"Glassdoor {degree} {experience} salary"
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.google.com/search?q={encoded_query}"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            salaries = []
+            results = soup.find_all('div', class_='g')[:5]
+            
+            for result in results:
+                title_elem = result.find('h3')
+                link_elem = result.find('a')
+                
+                if title_elem and link_elem:
+                    salary_info = {
+                        'title': title_elem.get_text(),
+                        'link': link_elem.get('href'),
+                        'source': 'Glassdoor'
+                    }
+                    salaries.append(salary_info)
+            
+            return salaries
+        except Exception as e:
+            print(f"Error fetching salary information: {e}")
+            return []
+    
+    def search_reddit_career_advice(self, degree: str, experience: str) -> List[Dict]:
+        """Search Reddit for career advice and discussions"""
+        try:
+            query = f"{degree} {experience} career advice reddit"
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.reddit.com/search.json?q={encoded_query}&sort=relevance&limit=10"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            
             if response.status_code == 200:
                 data = response.json()
                 posts = []
@@ -81,7 +204,8 @@ class UniversalResearchTool:
                         'url': f"https://reddit.com{post_data.get('permalink', '')}",
                         'score': post_data.get('score', 0),
                         'comments': post_data.get('num_comments', 0),
-                        'subreddit': post_data.get('subreddit', '')
+                        'subreddit': post_data.get('subreddit', ''),
+                        'created': datetime.fromtimestamp(post_data.get('created_utc', 0)).strftime('%Y-%m-%d')
                     })
                 return posts
             return []
@@ -89,234 +213,261 @@ class UniversalResearchTool:
             print(f"Error searching Reddit: {e}")
             return []
     
-    def search_github(self, query: str) -> List[Dict]:
-        """Search GitHub for relevant repositories and discussions"""
+    def search_quora_answers(self, degree: str, experience: str, skills: str) -> List[Dict]:
+        """Get career-related answers from Quora"""
         try:
-            url = f"https://api.github.com/search/repositories?q={query}&sort=updated&per_page=10"
+            query = f"Quora {degree} {experience} {skills} career"
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.google.com/search?q={encoded_query}"
             response = requests.get(url, headers=self.headers, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                repos = []
-                for repo in data['items'][:5]:
-                    repos.append({
-                        'name': repo.get('name', ''),
-                        'full_name': repo.get('full_name', ''),
-                        'description': repo.get('description', ''),
-                        'url': repo.get('html_url', ''),
-                        'stars': repo.get('stargazers_count', 0),
-                        'forks': repo.get('forks_count', 0),
-                        'updated': repo.get('updated_at', '')
-                    })
-                return repos
-            return []
-        except Exception as e:
-            print(f"Error searching GitHub: {e}")
-            return []
-    
-    def search_news_api(self, query: str) -> List[Dict]:
-        """Search news using NewsAPI (you'll need to add your API key)"""
-        try:
-            # You need to get a free API key from https://newsapi.org/
-            api_key = "nigga"  # Replace with your actual API key
-            if api_key == "nigga":
-                return []  # Skip if no API key
-                
-            url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&apiKey={api_key}"
-            response = requests.get(url, headers=self.headers, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                articles = []
-                for article in data.get('articles', [])[:10]:
-                    articles.append({
-                        'title': article.get('title', ''),
-                        'url': article.get('url', ''),
-                        'publishedAt': article.get('publishedAt', ''),
-                        'source': article.get('source', {}).get('name', 'Unknown'),
-                        'description': article.get('description', '')
-                    })
-                return articles
-            return []
-        except Exception as e:
-            print(f"Error with NewsAPI: {e}")
-            return []
-    
-    def search_bing_news(self, query: str) -> List[Dict]:
-        """Search Bing News as an alternative"""
-        try:
-            # Using a simple web search approach
-            search_url = f"https://www.bing.com/news/search?q={query}"
-            response = requests.get(search_url, headers=self.headers, timeout=10)
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            articles = []
-            # Look for news cards (this selector might need updating)
-            news_cards = soup.find_all('div', class_='news-card') or soup.find_all('div', attrs={'class': re.compile('news')})
+            answers = []
+            results = soup.find_all('div', class_='g')[:5]
             
-            for card in news_cards[:10]:
-                title_elem = card.find('a', class_='title') or card.find('h2') or card.find('a')
-                if title_elem:
-                    title = title_elem.get_text(strip=True)
-                    link = title_elem.get('href', '')
-                    if link and not link.startswith('http'):
-                        link = 'https://www.bing.com' + link
-                    
-                    articles.append({
-                        'title': title,
-                        'link': link,
-                        'source': 'Bing News'
-                    })
-            return articles
+            for result in results:
+                title_elem = result.find('h3')
+                link_elem = result.find('a')
+                
+                if title_elem and link_elem:
+                    answer = {
+                        'title': title_elem.get_text(),
+                        'link': link_elem.get('href'),
+                        'platform': 'Quora'
+                    }
+                    answers.append(answer)
+            
+            return answers
         except Exception as e:
-            print(f"Error searching Bing News: {e}")
+            print(f"Error fetching Quora answers: {e}")
             return []
     
-    def analyze_sentiment(self, text: str) -> str:
-        """Basic sentiment analysis"""
-        if not text:
-            return "Neutral"
+    def analyze_skill_trends(self, skills: str) -> Dict:
+        """Analyze current skill trends and demands"""
+        try:
+            query = f"most in demand skills {skills} 2024 2025"
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.google.com/search?q={encoded_query}"
+            response = requests.get(url, headers=self.headers, timeout=10)
+            soup = BeautifulSoup(response.content, 'html.parser')
             
-        positive_words = ['good', 'great', 'excellent', 'positive', 'success', 'growth', 'profit', 
-                         'amazing', 'outstanding', 'beneficial', 'progress', 'achievement']
-        negative_words = ['bad', 'poor', 'negative', 'loss', 'layoff', 'cut', 'decline', 
-                         'problem', 'issue', 'challenge', 'difficulty', 'crisis']
-        
-        text_lower = text.lower()
-        positive_count = sum(1 for word in positive_words if word in text_lower)
-        negative_count = sum(1 for word in negative_words if word in text_lower)
-        
-        if positive_count > negative_count:
-            return "Positive"
-        elif negative_count > positive_count:
-            return "Negative"
-        else:
-            return "Neutral"
+            # Extract skill trends from search results
+            skill_trends = {
+                'high_demand_skills': [],
+                'emerging_skills': [],
+                'traditional_skills': []
+            }
+            
+            # This is a simplified analysis - you can enhance this with more sophisticated parsing
+            results = soup.find_all('div', class_='g')[:3]
+            for result in results:
+                text_content = result.get_text().lower()
+                
+                # Simple keyword-based categorization
+                if any(word in text_content for word in ['ai', 'machine learning', 'data science', 'cloud']):
+                    skill_trends['emerging_skills'].append("AI/ML Technologies")
+                if any(word in text_content for word in ['python', 'java', 'javascript', 'sql']):
+                    skill_trends['high_demand_skills'].append("Programming Languages")
+                if any(word in text_content for word in ['communication', 'leadership', 'problem solving']):
+                    skill_trends['traditional_skills'].append("Soft Skills")
+            
+            return skill_trends
+        except Exception as e:
+            print(f"Error analyzing skill trends: {e}")
+            return {}
     
-    def generate_report(self, company: str, topic: str, year: str) -> Dict:
-        """Generate comprehensive research report"""
-        print(f"🔍 Researching {company} - {topic} - {year}...")
+    def generate_career_report(self, degree: str, experience: str, skills: str, job_market: str, year: str) -> Dict:
+        """Generate comprehensive career research report"""
+        print(f"🔍 Researching career path: {degree} for {experience} with skills in {skills}")
+        print(f"📊 Analyzing job market: {job_market} for year: {year}")
         
-        search_query = f"{company} {topic} {year}".strip()
+        # Build interconnected search queries
+        queries = self.build_search_queries(degree, experience, skills, job_market, year)
         
-        # Wikipedia information
-        print("📚 Getting Wikipedia information...")
-        wiki_info = self.get_wikipedia_info(company)
-        self.results['wikipedia'] = wiki_info
+        # Career opportunities
+        print("💼 Searching career opportunities...")
+        career_articles = self.search_google_news(queries['career_opportunities'])
+        self.results['career_opportunities'] = career_articles
         
-        # News articles from multiple sources
-        print("📰 Searching Google News...")
-        news_articles = self.search_google_news(search_query)
-        self.results['google_news'] = news_articles
+        # Required skills
+        print("🔧 Analyzing required skills...")
+        skills_articles = self.search_google_news(queries['skills_required'])
+        self.results['required_skills'] = skills_articles
         
-        print("🔍 Searching Bing News...")
-        bing_news = self.search_bing_news(search_query)
-        self.results['bing_news'] = bing_news
+        # Job market trends
+        print("📈 Researching job market trends...")
+        job_market_insights = self.search_indeed_insights(f"{degree} {experience}")
+        self.results['job_market_trends'] = job_market_insights
         
-        # Additional news sources (if API key available)
-        news_api_articles = self.search_news_api(search_query)
-        if news_api_articles:
-            self.results['news_api'] = news_api_articles
+        # Salary information
+        print("💰 Gathering salary information...")
+        salary_info = self.search_glassdoor_salaries(degree, experience)
+        self.results['salary_information'] = salary_info
         
-        # Reddit discussions
-        print("💬 Searching Reddit...")
-        reddit_posts = self.search_reddit(search_query)
-        self.results['reddit'] = reddit_posts
+        # Learning resources
+        print("🎓 Finding learning resources...")
+        courses = self.search_coursera_skills(degree, skills)
+        self.results['learning_resources'] = courses
         
-        # GitHub repositories
-        print("💻 Searching GitHub...")
-        github_repos = self.search_github(search_query)
-        self.results['github'] = github_repos
+        # Community discussions
+        print("💬 Searching community discussions...")
+        reddit_posts = self.search_reddit_career_advice(degree, experience)
+        self.results['community_discussions'] = reddit_posts
+        
+        # LinkedIn insights
+        print("👔 Getting LinkedIn insights...")
+        linkedin_insights = self.search_linkedin_insights(degree, skills)
+        self.results['linkedin_insights'] = linkedin_insights
+        
+        # Quora answers
+        print("🤔 Gathering Quora insights...")
+        quora_answers = self.search_quora_answers(degree, experience, skills)
+        self.results['quora_insights'] = quora_answers
+        
+        # Skill trends analysis
+        print("📊 Analyzing skill trends...")
+        skill_trends = self.analyze_skill_trends(skills)
+        self.results['skill_trends'] = skill_trends
         
         # Generate summary
-        self.results['summary'] = self._generate_summary(company, topic, year)
+        self.results['summary'] = self._generate_career_summary(degree, experience, skills, job_market, year)
         
         return self.results
     
-    def _generate_summary(self, company: str, topic: str, year: str) -> Dict:
-        """Generate summary of findings"""
-        total_articles = 0
-        all_text = ""
+    def _generate_career_summary(self, degree: str, experience: str, skills: str, job_market: str, year: str) -> Dict:
+        """Generate comprehensive career summary"""
+        total_sources = sum(len(items) for key, items in self.results.items() 
+                           if key not in ['summary', 'skill_trends'])
         
-        for source in ['google_news', 'bing_news', 'news_api', 'reddit', 'github']:
-            items = self.results.get(source, [])
-            total_articles += len(items)
-            
-            # Collect text for sentiment analysis
-            for item in items:
-                all_text += item.get('title', '') + " "
-                all_text += item.get('description', '') + " "
+        # Calculate overall opportunity score
+        opportunity_indicators = len(self.results.get('career_opportunities', [])) + \
+                               len(self.results.get('job_market_trends', [])) + \
+                               len(self.results.get('salary_information', []))
         
-        sentiment = self.analyze_sentiment(all_text)
+        if opportunity_indicators > 15:
+            market_outlook = "Very Positive"
+        elif opportunity_indicators > 8:
+            market_outlook = "Positive"
+        elif opportunity_indicators > 3:
+            market_outlook = "Moderate"
+        else:
+            market_outlook = "Limited Data"
         
         return {
-            'company': company,
-            'topic': topic,
-            'year': year,
-            'total_sources_found': total_articles,
-            'sentiment_analysis': sentiment,
+            'degree': degree,
+            'experience_level': experience,
+            'skills_focus': skills,
+            'job_market': job_market,
+            'target_year': year,
+            'total_sources_found': total_sources,
+            'market_outlook': market_outlook,
+            'career_areas_covered': list(self.results.keys()),
             'report_generated': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'data_sources': list(self.results.keys())
+            'key_findings': self._extract_key_findings()
         }
     
-    def display_results(self):
-        """Display results in a formatted way"""
+    def _extract_key_findings(self) -> List[str]:
+        """Extract key findings from the research"""
+        findings = []
+        
+        # Analyze career opportunities
+        career_articles = self.results.get('career_opportunities', [])
+        if career_articles:
+            findings.append(f"Found {len(career_articles)} recent career opportunity articles")
+        
+        # Analyze skills demand
+        skill_trends = self.results.get('skill_trends', {})
+        if skill_trends.get('high_demand_skills'):
+            findings.append(f"High demand skills identified: {', '.join(skill_trends['high_demand_skills'])}")
+        
+        # Analyze learning resources
+        courses = self.results.get('learning_resources', [])
+        if courses:
+            findings.append(f"Available learning resources: {len(courses)} courses/certifications")
+        
+        # Analyze community engagement
+        discussions = self.results.get('community_discussions', [])
+        if discussions:
+            findings.append(f"Active community discussions: {len(discussions)} threads")
+        
+        return findings
+    
+    def display_career_report(self):
+        """Display career research results in a formatted way"""
         summary = self.results['summary']
         
-        print(f"\n{'='*60}")
-        print(f"📊 RESEARCH REPORT SUMMARY")
-        print(f"{'='*60}")
-        print(f"🏢 Company: {summary['company']}")
-        print(f"📝 Topic: {summary['topic']}")
-        print(f"📅 Year: {summary['year']}")
-        print(f"📈 Total Sources Found: {summary['total_sources_found']}")
-        print(f"😊 Sentiment: {summary['sentiment_analysis']}")
-        print(f"🕒 Generated: {summary['report_generated']}")
-        print(f"{'='*60}")
+        print(f"\n{'='*70}")
+        print(f"🎓 CAREER RESEARCH REPORT")
+        print(f"{'='*70}")
+        print(f"📚 Degree/Qualification: {summary['degree']}")
+        print(f"👤 Experience Level: {summary['experience_level']}")
+        print(f"🔧 Skills Focus: {summary['skills_focus']}")
+        print(f"📈 Job Market: {summary['job_market']}")
+        print(f"🎯 Target Year: {summary['target_year']}")
+        print(f"📊 Market Outlook: {summary['market_outlook']}")
+        print(f"📋 Total Sources Analyzed: {summary['total_sources_found']}")
+        print(f"{'='*70}")
         
-        # Display Wikipedia summary
-        if self.results['wikipedia'] and self.results['wikipedia'].get('description'):
-            print(f"\n📚 Wikipedia Summary:")
-            print(f"   {self.results['wikipedia']['description'][:300]}...")
+        # Display key findings
+        print(f"\n🔍 KEY FINDINGS:")
+        for i, finding in enumerate(summary['key_findings'], 1):
+            print(f"   {i}. {finding}")
         
-        # Display news highlights
-        news_sources = ['google_news', 'bing_news', 'news_api']
-        for source in news_sources:
-            if self.results.get(source):
-                print(f"\n📰 {source.replace('_', ' ').title()} ({len(self.results[source])} articles):")
-                for i, article in enumerate(self.results[source][:3], 1):
-                    print(f"   {i}. {article['title'][:80]}...")
+        # Display career opportunities
+        if self.results.get('career_opportunities'):
+            print(f"\n💼 RECENT CAREER OPPORTUNITIES:")
+            for i, article in enumerate(self.results['career_opportunities'][:3], 1):
+                print(f"   {i}. {article['title'][:80]}...")
+                print(f"      📅 {article.get('published', 'Date not available')}")
         
-        # Display Reddit highlights
-        if self.results.get('reddit'):
-            print(f"\n💬 Reddit Discussions ({len(self.results['reddit'])} posts):")
-            for i, post in enumerate(self.results['reddit'][:3], 1):
-                print(f"   {i}. {post['title'][:80]}...")
-                print(f"      👍 Score: {post['score']} | 💬 Comments: {post['comments']}")
+        # Display required skills
+        if self.results.get('required_skills'):
+            print(f"\n🔧 IN-DEMAND SKILLS:")
+            for i, article in enumerate(self.results['required_skills'][:3], 1):
+                print(f"   {i}. {article['title'][:80]}...")
+        
+        # Display skill trends
+        if self.results.get('skill_trends'):
+            trends = self.results['skill_trends']
+            print(f"\n📊 SKILL TRENDS ANALYSIS:")
+            if trends.get('high_demand_skills'):
+                print(f"   🚀 High Demand: {', '.join(trends['high_demand_skills'])}")
+            if trends.get('emerging_skills'):
+                print(f"   🔥 Emerging: {', '.join(trends['emerging_skills'])}")
+            if trends.get('traditional_skills'):
+                print(f"   💼 Foundational: {', '.join(trends['traditional_skills'])}")
+        
+        # Display learning resources
+        if self.results.get('learning_resources'):
+            print(f"\n🎓 LEARNING RESOURCES:")
+            for i, course in enumerate(self.results['learning_resources'][:3], 1):
+                print(f"   {i}. {course['title'][:80]}...")
     
-    def save_report(self, filename: str = None):
-        """Save report to file"""
+    def save_career_report(self, filename: str = None):
+        """Save career report to file"""
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            company = self.results['summary']['company'].replace(' ', '_')
-            filename = f"{company}_research_report_{timestamp}"
+            degree = self.results['summary']['degree'].replace(' ', '_')
+            filename = f"career_report_{degree}_{timestamp}"
         
         # Save as JSON
         with open(f"{filename}.json", 'w', encoding='utf-8') as f:
             json.dump(self.results, f, indent=2, ensure_ascii=False)
         
         # Save as HTML report
-        self._generate_html_report(filename)
+        self._generate_career_html_report(filename)
         
-        print(f"✅ Report saved as {filename}.json and {filename}.html")
-    
-    def _generate_html_report(self, filename: str):
-        """Generate HTML version of the report"""
+        print(f"✅ Career report saved as {filename}.json and {filename}.html")
+
+    def _generate_career_html_report(self, filename: str):
+        """Generate HTML version of the career report"""
         summary = self.results['summary']
         
         html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Research Report - {summary['company']}</title>
+            <title>Career Research Report - {summary['degree']}</title>
             <meta charset="UTF-8">
             <style>
                 body {{ 
@@ -348,7 +499,7 @@ class UniversalResearchTool:
                 }}
                 .summary-grid {{
                     display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
                     gap: 15px;
                     margin-top: 15px;
                 }}
@@ -375,9 +526,9 @@ class UniversalResearchTool:
                     transform: translateY(-2px); 
                     box-shadow: 0 5px 15px rgba(0,0,0,0.1);
                 }}
-                .sentiment-positive {{ color: #27ae60; font-weight: bold; }}
-                .sentiment-negative {{ color: #e74c3c; font-weight: bold; }}
-                .sentiment-neutral {{ color: #f39c12; font-weight: bold; }}
+                .market-positive {{ color: #27ae60; font-weight: bold; }}
+                .market-moderate {{ color: #f39c12; font-weight: bold; }}
+                .market-limited {{ color: #e74c3c; font-weight: bold; }}
                 .source-badge {{
                     background: #3498db;
                     color: white;
@@ -388,35 +539,48 @@ class UniversalResearchTool:
                 }}
                 a {{ color: #2980b9; text-decoration: none; }}
                 a:hover {{ text-decoration: underline; }}
+                .skill-category {{
+                    margin: 10px 0;
+                    padding: 10px;
+                    border-left: 4px solid #3498db;
+                    background: #f8f9fa;
+                }}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🔍 Research Report</h1>
-                    <h2>{summary['company']} - {summary['topic']} - {summary['year']}</h2>
+                    <h1>🎓 Career Research Report</h1>
+                    <h2>{summary['degree']} for {summary['experience_level']}</h2>
+                    <h3>Skills: {summary['skills_focus']} | Market: {summary['job_market']} | Year: {summary['target_year']}</h3>
                 </div>
                 
                 <div class="summary">
                     <h3>📊 Executive Summary</h3>
                     <div class="summary-grid">
                         <div class="summary-item">
-                            <strong>Company:</strong><br>{summary['company']}
+                            <strong>Degree/Qualification:</strong><br>{summary['degree']}
                         </div>
                         <div class="summary-item">
-                            <strong>Topic:</strong><br>{summary['topic']}
+                            <strong>Experience Level:</strong><br>{summary['experience_level']}
                         </div>
                         <div class="summary-item">
-                            <strong>Year:</strong><br>{summary['year']}
+                            <strong>Skills Focus:</strong><br>{summary['skills_focus']}
                         </div>
                         <div class="summary-item">
-                            <strong>Sources Found:</strong><br>{summary['total_sources_found']}
+                            <strong>Job Market:</strong><br>{summary['job_market']}
                         </div>
                         <div class="summary-item">
-                            <strong>Sentiment:</strong><br>
-                            <span class="sentiment-{summary['sentiment_analysis'].lower()}">
-                                {summary['sentiment_analysis']}
+                            <strong>Target Year:</strong><br>{summary['target_year']}
+                        </div>
+                        <div class="summary-item">
+                            <strong>Market Outlook:</strong><br>
+                            <span class="market-{summary['market_outlook'].split()[0].lower()}">
+                                {summary['market_outlook']}
                             </span>
+                        </div>
+                        <div class="summary-item">
+                            <strong>Sources Analyzed:</strong><br>{summary['total_sources_found']}
                         </div>
                         <div class="summary-item">
                             <strong>Generated:</strong><br>{summary['report_generated']}
@@ -425,48 +589,79 @@ class UniversalResearchTool:
                 </div>
         """
         
-        # Add Wikipedia info
-        if self.results['wikipedia'] and self.results['wikipedia'].get('description'):
-            html_content += f"""
+        # Add key findings
+        if summary.get('key_findings'):
+            html_content += """
             <div class="section">
-                <h2>📚 Wikipedia Summary</h2>
-                <div class="article">
-                    <p>{self.results['wikipedia'].get('description', 'No description available')}</p>
-                    {f'<p><a href="{self.results["wikipedia"].get("full_url", "#")}">Read more on Wikipedia</a></p>' if self.results['wikipedia'].get('full_url') else ''}
-                </div>
-            </div>
+                <h2>🔍 Key Findings</h2>
             """
+            for finding in summary['key_findings']:
+                html_content += f'<div class="article"><p>✅ {finding}</p></div>'
+            html_content += "</div>"
         
-        # Add news articles from all sources
-        news_sources = [
-            ('google_news', 'Google News'),
-            ('bing_news', 'Bing News'), 
-            ('news_api', 'News API'),
-            ('reddit', 'Reddit Discussions'),
-            ('github', 'GitHub Repositories')
+        # Add skill trends
+        if self.results.get('skill_trends'):
+            trends = self.results['skill_trends']
+            html_content += """
+            <div class="section">
+                <h2>📊 Skill Trends Analysis</h2>
+            """
+            if trends.get('high_demand_skills'):
+                html_content += f"""
+                <div class="skill-category">
+                    <h3>🚀 High Demand Skills</h3>
+                    <p>{', '.join(trends['high_demand_skills'])}</p>
+                </div>
+                """
+            if trends.get('emerging_skills'):
+                html_content += f"""
+                <div class="skill-category">
+                    <h3>🔥 Emerging Skills</h3>
+                    <p>{', '.join(trends['emerging_skills'])}</p>
+                </div>
+                """
+            if trends.get('traditional_skills'):
+                html_content += f"""
+                <div class="skill-category">
+                    <h3>💼 Foundational Skills</h3>
+                    <p>{', '.join(trends['traditional_skills'])}</p>
+                </div>
+                """
+            html_content += "</div>"
+        
+        # Add all research sections
+        research_sections = [
+            ('career_opportunities', '💼 Career Opportunities'),
+            ('required_skills', '🔧 Required Skills'),
+            ('job_market_trends', '📈 Job Market Trends'),
+            ('salary_information', '💰 Salary Information'),
+            ('learning_resources', '🎓 Learning Resources'),
+            ('community_discussions', '💬 Community Discussions'),
+            ('linkedin_insights', '👔 LinkedIn Insights'),
+            ('quora_insights', '🤔 Quora Insights')
         ]
         
-        for source_key, source_name in news_sources:
-            if self.results.get(source_key):
+        for section_key, section_name in research_sections:
+            if self.results.get(section_key):
                 html_content += f"""
                 <div class="section">
-                    <h2>📰 {source_name} ({len(self.results[source_key])} results)</h2>
+                    <h2>{section_name} ({len(self.results[section_key])} results)</h2>
                 """
-                for item in self.results[source_key]:
+                for item in self.results[section_key]:
                     title = item.get('title', item.get('name', 'No title'))
                     url = item.get('url', item.get('link', '#'))
-                    description = item.get('description', '')
+                    description = item.get('description', item.get('summary', ''))
                     
                     html_content += f"""
                     <div class="article">
                         <h3><a href="{url}" target="_blank">{title}</a></h3>
                         {f'<p>{description}</p>' if description else ''}
                         <div>
-                            <span class="source-badge">{source_name}</span>
-                            {f"<strong>Published:</strong> {item.get('published', item.get('publishedAt', item.get('updated', '')))}" if item.get('published') or item.get('publishedAt') or item.get('updated') else ''}
-                            {f"<strong>Source:</strong> {item.get('source', '')}" if item.get('source') else ''}
-                            {f"<strong>Stars:</strong> ⭐ {item.get('stars', '')}" if item.get('stars') else ''}
+                            <span class="source-badge">{section_name}</span>
+                            {f"<strong>Published:</strong> {item.get('published', item.get('created', ''))}" if item.get('published') or item.get('created') else ''}
+                            {f"<strong>Source:</strong> {item.get('source', item.get('platform', ''))}" if item.get('source') or item.get('platform') else ''}
                             {f"<strong>Score:</strong> 👍 {item.get('score', '')}" if item.get('score') else ''}
+                            {f"<strong>Comments:</strong> 💬 {item.get('comments', '')}" if item.get('comments') else ''}
                         </div>
                     </div>
                     """
@@ -482,20 +677,20 @@ class UniversalResearchTool:
             f.write(html_content)
 
 def main():
-    """Main function to run the research tool"""
-    print("🌐 Universal Company & Topic Research Tool")
-    print("=" * 60)
-    print("Enter your search query in format: company,topic,year")
-    print("Example: dell,layoff,2025")
-    print("Example: microsoft,ai,2024")
-    print("Example: tesla,autopilot,2023")
-    print("=" * 60)
+    """Main function to run the career research tool"""
+    print("🎓 Career Path Research Tool")
+    print("=" * 70)
+    print("Enter your career research query in format: degree,experience,skills,job_market,year")
+    print("Example: M.com,fresher,accounting,finance,2025")
+    print("Example: B.Tech Computer Science,fresher,programming,IT,2024")
+    print("Example: MBA,experienced,marketing,corporate,2025")
+    print("=" * 70)
     
-    research_tool = UniversalResearchTool()
+    research_tool = CareerResearchTool()
     
     while True:
         try:
-            user_input = input("\n🔍 Enter your search query (or 'quit' to exit): ").strip()
+            user_input = input("\n🔍 Enter your career research query (or 'quit' to exit): ").strip()
             
             if user_input.lower() in ['quit', 'exit', 'q']:
                 break
@@ -503,24 +698,24 @@ def main():
             if not user_input:
                 continue
                 
-            company, topic, year = research_tool.parse_query(user_input)
+            degree, experience, skills, job_market, year = research_tool.parse_query(user_input)
             
-            if not company:
-                print("❌ Please enter at least a company name")
+            if not degree:
+                print("❌ Please enter at least a degree/qualification")
                 continue
             
-            # Generate report
-            print(f"\n🚀 Starting research for: {company} - {topic} - {year}")
-            report = research_tool.generate_report(company, topic, year)
+            # Generate career report
+            print(f"\n🚀 Starting career research for: {degree} - {experience} - {skills}")
+            report = research_tool.generate_career_report(degree, experience, skills, job_market, year)
             
             # Display results
-            research_tool.display_results()
+            research_tool.display_career_report()
             
             # Save report
-            save_choice = input("\n💾 Save report? (y/n): ").lower()
+            save_choice = input("\n💾 Save career report? (y/n): ").lower()
             if save_choice in ['y', 'yes']:
-                research_tool.save_report()
-                print("✅ Report saved successfully!")
+                research_tool.save_career_report()
+                print("✅ Career report saved successfully!")
                 
         except KeyboardInterrupt:
             print("\n👋 Goodbye!")
@@ -529,7 +724,5 @@ def main():
             print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
-    # Install required packages first:
-    # pip install requests beautifulsoup4 pandas feedparser
-    
+ 
     main()
