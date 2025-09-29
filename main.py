@@ -117,8 +117,8 @@ class UniversalResearchTool:
         """Search news using NewsAPI (you'll need to add your API key)"""
         try:
             # You need to get a free API key from https://newsapi.org/
-            api_key = "7799de012fbb480b952bf80dd7fff65c"  # Replace with your actual API key
-            if api_key == "7799de012fbb480b952bf80dd7fff65c":
+            api_key = "nigga"  # Replace with your actual API key
+            if api_key == "nigga":
                 return []  # Skip if no API key
                 
             url = f"https://newsapi.org/v2/everything?q={query}&sortBy=publishedAt&apiKey={api_key}"
