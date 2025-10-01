@@ -680,10 +680,6 @@ def main():
     """Main function to run the career research tool"""
     print("🎓 Career Path Research Tool")
     print("=" * 70)
-    print("Enter your career research query in format: degree,experience,skills,job_market,year")
-    print("Example: M.com,fresher,accounting,finance,2025")
-    print("Example: B.Tech Computer Science,fresher,programming,IT,2024")
-    print("Example: MBA,experienced,marketing,corporate,2025")
     print("=" * 70)
     
     research_tool = CareerResearchTool()
