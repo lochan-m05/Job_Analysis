@@ -27,7 +27,7 @@ class CareerResearchTool:
         experience = parts[1].strip() if len(parts) > 1 else ""
         skills = parts[2].strip() if len(parts) > 2 else ""
         job_market = parts[3].strip() if len(parts) > 3 else ""
-        year = parts[4].strip() if len(parts) > 4 else "2024"
+        year = parts[4].strip() if len(parts) > 4 else "2025"
         
         return degree, experience, skills, job_market, year
     
